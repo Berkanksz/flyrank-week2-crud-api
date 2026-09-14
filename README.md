@@ -37,4 +37,4 @@ content-type: application/json
 
 ## Swagger UI Screenshot
 Interactive documentation is available at `http://localhost:8000/docs`.
-![Swagger UI](Screenshots/Fastapi.png)
+![Swagger UI](Screenshots/fastapiextra.png)
