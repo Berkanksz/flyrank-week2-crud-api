@@ -38,3 +38,17 @@ content-type: application/json
 ## Swagger UI Screenshot
 Interactive documentation is available at `http://localhost:8000/docs`.
 ![Swagger UI](Screenshots/fastapiextra.png)
+
+## Stage 7: AI Rematch (AI vs Me)
+
+After manually building the API, I prompted an AI assistant (Claude) to generate the same CRUD API from scratch. I stored its output in `ai-version/main.py` and compared it against my original code. 
+
+**What the AI did better (or more professionally):**
+* **Data Modeling:** The AI used a dedicated Pydantic model (`class Task(BaseModel)`) for the in-memory storage, whereas I used a raw Python list of dictionaries.
+* **Code Reusability:** The AI abstracted the search logic into a `find_task()` helper function, eliminating the need to repeat `for` loops inside the GET, PUT, and DELETE endpoints.
+* **Response Models:** The AI explicitly defined `response_model=Task` and `response_model=list[Task]` in the decorators. This provides stricter typing and makes the Swagger UI documentation more accurate.
+* **Schema Validation:** The AI utilized Pydantic's `@field_validator` to handle empty string validations at the schema level, rather than doing it inside the route functions.
+
+**Where my code was better (or what the AI missed):**
+* **ID Generation:** I used a dynamic `max()` function to safely calculate the next available ID. The AI relied on a global state variable (`global _next_id`), which can be problematic in multi-threaded environments.
+* **Missing Features:** The AI did not include the `/stats` endpoint. Since I didn't explicitly request it in the prompt, it proved that the AI's output is strictly limited by the prompt's completeness.
