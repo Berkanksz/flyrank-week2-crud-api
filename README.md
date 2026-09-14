@@ -21,6 +21,7 @@ The API will be available at `http://localhost:8000`.
 | **Create** | POST | `/tasks` | Creates a new task |
 | **Update** | PUT | `/tasks/{task_id}` | Updates an existing task |
 | **Delete** | DELETE | `/tasks/{task_id}` | Deletes a task |
+| **Extra** | GET | `/stats` | Returns task statistics |
 
 ## Example `curl` Output (GET /tasks/1)
 ```bash
