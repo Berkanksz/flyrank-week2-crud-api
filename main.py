@@ -62,13 +62,6 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
-# In-memory "database" (Stage 2)
-tasks = [
-    {"id": 1, "title": "Buy milk", "done": False},
-    {"id": 2, "title": "Learn FastAPI", "done": True},
-    {"id": 3, "title": "Complete internship assignment", "done": False}
-]
-
 class TaskCreate(BaseModel):
     title: str | None = None
 
@@ -123,28 +116,33 @@ def update_task(task_id: int, task_in: TaskUpdate):
     if task_in.title is not None and not task_in.title.strip():
         raise HTTPException(status_code=400, detail="Title cannot be empty")
 
-    for task in tasks:
-        if task["id"] == task_id:
-            if task_in.title is not None:
-                task["title"] = task_in.title
-            if task_in.done is not None:
-                task["done"] = task_in.done
-            return task
-    raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+    # COALESCE(?, column) keeps the old value when a field is not sent,
+    # so partial updates behave exactly like in Assignment 1.
+    done_value = None if task_in.done is None else int(task_in.done)
+    with get_db() as conn:
+        cursor = conn.execute(
+            "UPDATE tasks SET title = COALESCE(?, title), done = COALESCE(?, done) WHERE id = ?",
+            (task_in.title, done_value, task_id),
+        )
+        if cursor.rowcount == 0:
+            raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+        row = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
+    return row_to_task(row)
 
 @app.delete("/tasks/{task_id}", status_code=204)
 def delete_task(task_id: int):
     """Delete a task from the database."""
-    for index, task in enumerate(tasks):
-        if task["id"] == task_id:
-            del tasks[index]
-            return
-    raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+    with get_db() as conn:
+        cursor = conn.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
+        if cursor.rowcount == 0:
+            raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
 
 @app.get("/stats")
 def get_stats():
     """Get statistics about the tasks."""
-    total = len(tasks)
-    done = sum(1 for task in tasks if task["done"])
+    with get_db() as conn:
+        rows = conn.execute("SELECT done FROM tasks").fetchall()
+    total = len(rows)
+    done = sum(1 for row in rows if row["done"])
     open_tasks = total - done
     return {"total": total, "done": done, "open": open_tasks}
