@@ -48,6 +48,12 @@ def init_db():
             )
             """
         )
+        # Index on done: lets SQLite jump straight to matching rows for ?done=true
+        # instead of scanning the whole table.
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_tasks_done ON tasks (done)")
+
+        # get_db() wraps this block in one transaction: either all three seed tasks
+        # are inserted or none are, so a crash mid-seed can't leave a half-seeded table.
         count = conn.execute("SELECT COUNT(*) FROM tasks").fetchone()[0]
         if count == 0:
             conn.executemany("INSERT INTO tasks (title, done) VALUES (?, ?)", SEED_TASKS)
@@ -80,10 +86,34 @@ def health_check():
     return {"status": "ok"}
 
 @app.get("/tasks")
-def get_tasks():
-    """List all tasks in the database."""
+def get_tasks(search: str | None = None, done: bool | None = None, sort: str | None = None):
+    """List all tasks in the database.
+
+    Optional filters (Extras), all done by SQL instead of Python loops:
+    ?search=milk  -> WHERE title LIKE '%milk%'
+    ?done=true    -> WHERE done = 1
+    ?sort=title   -> ORDER BY title (default is ORDER BY id)
+    """
+    if sort not in (None, "id", "title"):
+        raise HTTPException(status_code=400, detail="sort must be 'id' or 'title'")
+
+    # Only fixed SQL fragments are joined together. User values always go in params.
+    conditions = []
+    params = []
+    if search:
+        conditions.append("title LIKE ?")
+        params.append(f"%{search}%")
+    if done is not None:
+        conditions.append("done = ?")
+        params.append(int(done))
+
+    query = "SELECT * FROM tasks"
+    if conditions:
+        query += " WHERE " + " AND ".join(conditions)
+    query += " ORDER BY title COLLATE NOCASE, id" if sort == "title" else " ORDER BY id"
+
     with get_db() as conn:
-        rows = conn.execute("SELECT * FROM tasks ORDER BY id").fetchall()
+        rows = conn.execute(query, params).fetchall()
     return [row_to_task(row) for row in rows]
 
 @app.get("/tasks/{task_id}")
@@ -141,8 +171,10 @@ def delete_task(task_id: int):
 def get_stats():
     """Get statistics about the tasks."""
     with get_db() as conn:
-        rows = conn.execute("SELECT done FROM tasks").fetchall()
-    total = len(rows)
-    done = sum(1 for row in rows if row["done"])
+        row = conn.execute(
+            "SELECT COUNT(*) AS total, COALESCE(SUM(done), 0) AS done FROM tasks"
+        ).fetchone()
+    total = row["total"]
+    done = row["done"]
     open_tasks = total - done
     return {"total": total, "done": done, "open": open_tasks}

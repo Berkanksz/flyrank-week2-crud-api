@@ -87,5 +87,25 @@ After running `UPDATE tasks SET done = 1;` in DB Browser, `GET /tasks` immediate
 ### DB Browser screenshot
 ![tasks.db in DB Browser for SQLite](Screenshots/db-browser.png)
 
+## Extras: let the database do the work
+| Feature | Example | SQL |
+| :--- | :--- | :--- |
+| Search | `GET /tasks?search=milk` | `WHERE title LIKE ?` with `%milk%` |
+| Filter by status | `GET /tasks?done=true` | `WHERE done = ?` |
+| Sort alphabetically | `GET /tasks?sort=title` | `ORDER BY title COLLATE NOCASE` |
+| Real statistics | `GET /stats` | `SELECT COUNT(*), SUM(done) FROM tasks` |
+
+The filters can be combined, for example `GET /tasks?search=learn&done=true&sort=title`. Without query parameters `GET /tasks` behaves exactly like Assignment 1.
+
+## Stretch goals
+1. **Index.** `CREATE INDEX idx_tasks_done ON tasks (done)` backs the `?done=` filter. An index is a sorted lookup structure that lets the database find matching rows without scanning the whole table.
+2. **Transaction.** The three seed inserts run inside one transaction (commit on success, rollback on error in `get_db()`). This matters because it is all-or-nothing: a crash mid-seed can never leave the table half-seeded.
+3. **Proof the API didn't change.** [`test_api.py`](test_api.py) contains the A1 endpoint checks (every path, body, response and status code). I ran the exact same `test_a1_contract` against the Week 2 in-memory `main.py` and against this SQLite version, and it passes on both. Identical tests passing on both is the proof that storage is just an implementation detail: the client-facing contract is the same, only what sits behind it changed.
+
+Run the tests (they use a temporary database and never touch `tasks.db`):
+```bash
+python test_api.py
+```
+
 ## Week 2 history
 This repo continues from Assignment 1. The Stage 0 to Stage 7 commits of the in-memory version are still in `git log`, and `ai-version/` holds the Week 2 AI rematch code.
