@@ -1,7 +1,61 @@
+import sqlite3
+from contextlib import asynccontextmanager, contextmanager
+from pathlib import Path
+
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
-app = FastAPI()
+# SQLite database file. It lives next to main.py and is created automatically.
+DB_PATH = Path(__file__).parent / "tasks.db"
+
+# Example tasks inserted only on the very first run (when the table is empty).
+SEED_TASKS = [
+    ("Buy milk", 0),
+    ("Learn FastAPI", 1),
+    ("Complete internship assignment", 0),
+]
+
+
+@contextmanager
+def get_db():
+    """Open a connection, commit on success, roll back on error, always close."""
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    try:
+        yield conn
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+def init_db():
+    """Create tasks.db, the tasks table and the seed rows if they are missing."""
+    with get_db() as conn:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS tasks (
+                id    INTEGER PRIMARY KEY,
+                title TEXT    NOT NULL,
+                done  INTEGER NOT NULL DEFAULT 0 CHECK (done IN (0, 1))
+            )
+            """
+        )
+        count = conn.execute("SELECT COUNT(*) FROM tasks").fetchone()[0]
+        if count == 0:
+            conn.executemany("INSERT INTO tasks (title, done) VALUES (?, ?)", SEED_TASKS)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Runs once when the server starts: make sure the database is ready."""
+    init_db()
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
 
 # In-memory "database" (Stage 2)
 tasks = [

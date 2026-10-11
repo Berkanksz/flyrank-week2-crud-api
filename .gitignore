@@ -1,0 +1,13 @@
+# SQLite database: created automatically on first run, every clone starts fresh
+tasks.db
+tasks.db-journal
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# OS / editor
+.DS_Store
+.vscode/
