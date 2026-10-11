@@ -107,11 +107,13 @@ def create_task(task_in: TaskCreate):
     """Create a new task."""
     if not task_in.title or not task_in.title.strip():
         raise HTTPException(status_code=400, detail="Title is missing or empty")
-    
-    new_id = max((task["id"] for task in tasks), default=0) + 1
-    new_task = {"id": new_id, "title": task_in.title, "done": False}
-    tasks.append(new_task)
-    return new_task
+
+    with get_db() as conn:
+        cursor = conn.execute(
+            "INSERT INTO tasks (title, done) VALUES (?, ?)", (task_in.title, 0)
+        )
+        new_id = cursor.lastrowid
+    return {"id": new_id, "title": task_in.title, "done": False}
 
 @app.put("/tasks/{task_id}")
 def update_task(task_id: int, task_in: TaskUpdate):
