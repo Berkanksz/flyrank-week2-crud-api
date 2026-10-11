@@ -31,6 +31,11 @@ def get_db():
         conn.close()
 
 
+def row_to_task(row: sqlite3.Row) -> dict:
+    """Turn a database row into the same JSON shape A1 returned (done as true/false)."""
+    return {"id": row["id"], "title": row["title"], "done": bool(row["done"])}
+
+
 def init_db():
     """Create tasks.db, the tasks table and the seed rows if they are missing."""
     with get_db() as conn:
@@ -84,15 +89,18 @@ def health_check():
 @app.get("/tasks")
 def get_tasks():
     """List all tasks in the database."""
-    return tasks
+    with get_db() as conn:
+        rows = conn.execute("SELECT * FROM tasks ORDER BY id").fetchall()
+    return [row_to_task(row) for row in rows]
 
 @app.get("/tasks/{task_id}")
 def get_task(task_id: int):
     """Get a single task by its ID."""
-    for task in tasks:
-        if task["id"] == task_id:
-            return task
-    raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+    with get_db() as conn:
+        row = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+    return row_to_task(row)
 
 @app.post("/tasks", status_code=201)
 def create_task(task_in: TaskCreate):
