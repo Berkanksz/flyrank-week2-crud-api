@@ -82,3 +82,45 @@ def get_task(task_id: int) -> dict | None:
         return conn.execute(
             "SELECT id, title, done FROM tasks WHERE id = %s", (task_id,)
         ).fetchone()
+
+
+def create_task(title: str) -> dict:
+    """Insert a new task into Postgres, letting SERIAL assign id. Returns the created row."""
+    with get_db() as conn:
+        return conn.execute(
+            "INSERT INTO tasks (title, done) VALUES (%s, %s) RETURNING id, title, done",
+            (title, False),
+        ).fetchone()
+
+
+def update_task(task_id: int, title: str | None = None, done: bool | None = None) -> dict | None:
+    """Update title and/or done using COALESCE so missing fields keep their current values."""
+    with get_db() as conn:
+        return conn.execute(
+            """
+            UPDATE tasks
+               SET title = COALESCE(%s, title),
+                   done  = COALESCE(%s, done)
+             WHERE id = %s
+            RETURNING id, title, done
+            """,
+            (title, done, task_id),
+        ).fetchone()
+
+
+def delete_task(task_id: int) -> bool:
+    """Delete a task. Returns True if a row was deleted, False if not found."""
+    with get_db() as conn:
+        result = conn.execute("DELETE FROM tasks WHERE id = %s", (task_id,))
+        return result.rowcount > 0
+
+
+def get_stats() -> dict:
+    """Count tasks and done tasks directly in Postgres."""
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT COUNT(*) AS total, COALESCE(COUNT(*) FILTER (WHERE done), 0) AS done FROM tasks"
+        ).fetchone()
+    total = row["total"]
+    done = row["done"]
+    return {"total": total, "done": done, "open": total - done}
