@@ -54,3 +54,31 @@ def init_db():
         if count == 0:
             with conn.cursor() as cur:
                 cur.executemany("INSERT INTO tasks (title, done) VALUES (%s, %s)", SEED_TASKS)
+
+
+def list_tasks(search: str | None = None, done: bool | None = None, sort: str | None = None) -> list[dict]:
+    """SELECT tasks, optionally filtered and sorted by the database."""
+    # Only fixed SQL fragments are joined together. User values always go in params.
+    conditions = []
+    params = []
+    if search:
+        conditions.append("title ILIKE %s")
+        params.append(f"%{search}%")
+    if done is not None:
+        conditions.append("done = %s")
+        params.append(done)
+
+    query = "SELECT id, title, done FROM tasks"
+    if conditions:
+        query += " WHERE " + " AND ".join(conditions)
+    query += " ORDER BY LOWER(title), id" if sort == "title" else " ORDER BY id"
+
+    with get_db() as conn:
+        return conn.execute(query, params).fetchall()
+
+
+def get_task(task_id: int) -> dict | None:
+    with get_db() as conn:
+        return conn.execute(
+            "SELECT id, title, done FROM tasks WHERE id = %s", (task_id,)
+        ).fetchone()

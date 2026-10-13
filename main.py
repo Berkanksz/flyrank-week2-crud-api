@@ -92,40 +92,21 @@ def get_tasks(search: str | None = None, done: bool | None = None, sort: str | N
     """List all tasks in the database.
 
     Optional filters (Extras), all done by SQL instead of Python loops:
-    ?search=milk  -> WHERE title LIKE '%milk%'
-    ?done=true    -> WHERE done = 1
+    ?search=milk  -> WHERE title ILIKE '%milk%'
+    ?done=true    -> WHERE done = true
     ?sort=title   -> ORDER BY title (default is ORDER BY id)
     """
     if sort not in (None, "id", "title"):
         raise HTTPException(status_code=400, detail="sort must be 'id' or 'title'")
-
-    # Only fixed SQL fragments are joined together. User values always go in params.
-    conditions = []
-    params = []
-    if search:
-        conditions.append("title LIKE ?")
-        params.append(f"%{search}%")
-    if done is not None:
-        conditions.append("done = ?")
-        params.append(int(done))
-
-    query = "SELECT * FROM tasks"
-    if conditions:
-        query += " WHERE " + " AND ".join(conditions)
-    query += " ORDER BY title COLLATE NOCASE, id" if sort == "title" else " ORDER BY id"
-
-    with get_db() as conn:
-        rows = conn.execute(query, params).fetchall()
-    return [row_to_task(row) for row in rows]
+    return repository.list_tasks(search=search, done=done, sort=sort)
 
 @app.get("/tasks/{task_id}")
 def get_task(task_id: int):
     """Get a single task by its ID."""
-    with get_db() as conn:
-        row = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
-    if row is None:
+    task = repository.get_task(task_id)
+    if task is None:
         raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
-    return row_to_task(row)
+    return task
 
 @app.post("/tasks", status_code=201)
 def create_task(task_in: TaskCreate):
