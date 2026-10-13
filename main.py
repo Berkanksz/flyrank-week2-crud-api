@@ -5,6 +5,8 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
+import repository
+
 # SQLite database file. It lives next to main.py and is created automatically.
 DB_PATH = Path(__file__).parent / "tasks.db"
 
@@ -62,7 +64,7 @@ def init_db():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Runs once when the server starts: make sure the database is ready."""
-    init_db()
+    repository.init_db()
     yield
 
 
