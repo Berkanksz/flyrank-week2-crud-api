@@ -1,5 +1,8 @@
 # FlyRank Backend Internship - Week 3: CRUD API on SQLite
 
+> A3 (Containerize your stack) in progress. Postgres runs in Docker:
+> `docker run --name taskdb -e POSTGRES_PASSWORD=dev -e POSTGRES_DB=tasks -p 5432:5432 -v taskdata:/var/lib/postgresql/data -d postgres:17`
+
 This is the Week 2 FastAPI task API, now backed by a real **SQLite** database instead of an in-memory list. The endpoints, request bodies, responses and status codes are exactly the same as in Assignment 1. Only the storage layer changed, so tasks now survive a server restart.
 
 ```

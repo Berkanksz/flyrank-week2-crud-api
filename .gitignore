@@ -1,4 +1,7 @@
-# SQLite database: created automatically on first run, every clone starts fresh
+# Secrets: real credentials live only in .env (see .env.example)
+.env
+
+# SQLite database from A2 (no longer used, kept ignored)
 tasks.db
 tasks.db-journal
 
