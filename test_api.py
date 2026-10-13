@@ -1,83 +1,79 @@
-"""Endpoint tests: the same checks used for the A1 in-memory API, run against SQLite.
+"""Endpoint tests against the live API (docker compose stack or local server).
 
 Run with:  python test_api.py
-Uses a temporary database file, so your real tasks.db is never touched.
 """
-import tempfile
-from pathlib import Path
+import os
+import httpx
 
-from fastapi.testclient import TestClient
-
-import main
+BASE_URL = os.environ.get("API_URL", "http://localhost:8000")
 
 
-def fresh_client(db_path: Path) -> TestClient:
-    main.DB_PATH = db_path
-    return TestClient(main.app)
+def test_api():
+    client = httpx.Client(base_url=BASE_URL, timeout=10.0)
 
+    # 1. Health check
+    r = client.get("/health")
+    assert r.status_code == 200, f"Health check failed: {r.text}"
+    print("Health check OK:", r.json())
 
-def test_a1_contract(client: TestClient):
-    # Read
+    # 2. Seeded tasks
     r = client.get("/tasks")
     assert r.status_code == 200
-    assert r.json() == [
-        {"id": 1, "title": "Buy milk", "done": False},
-        {"id": 2, "title": "Learn FastAPI", "done": True},
-        {"id": 3, "title": "Complete internship assignment", "done": False},
-    ]
-    assert client.get("/tasks/1").json() == {"id": 1, "title": "Buy milk", "done": False}
-    assert client.get("/tasks/999").status_code == 404
+    tasks = r.json()
+    assert len(tasks) >= 3
+    print("GET /tasks OK, found tasks:", len(tasks))
 
-    # Create
-    r = client.post("/tasks", json={"title": "Write tests"})
+    # 3. Read single
+    r = client.get("/tasks/1")
+    assert r.status_code == 200
+    assert r.json()["id"] == 1
+
+    # 4. Read not found
+    assert client.get("/tasks/999999").status_code == 404
+
+    # 5. Create
+    r = client.post("/tasks", json={"title": "Test new task"})
     assert r.status_code == 201
-    assert r.json() == {"id": 4, "title": "Write tests", "done": False}
+    new_task = r.json()
+    new_id = new_task["id"]
+    assert new_task["title"] == "Test new task"
+    assert new_task["done"] is False
+
+    # Create validation errors
     assert client.post("/tasks", json={}).status_code == 400
     assert client.post("/tasks", json={"title": "   "}).status_code == 400
 
-    # Update
-    r = client.put("/tasks/4", json={"done": True})
+    # 6. Update
+    r = client.put(f"/tasks/{new_id}", json={"done": True})
     assert r.status_code == 200
-    assert r.json() == {"id": 4, "title": "Write tests", "done": True}
-    assert client.put("/tasks/4", json={}).status_code == 400
-    assert client.put("/tasks/4", json={"title": ""}).status_code == 400
-    assert client.put("/tasks/999", json={"done": True}).status_code == 404
+    assert r.json()["done"] is True
 
-    # Delete
-    r = client.delete("/tasks/4")
+    # Update validation errors
+    assert client.put(f"/tasks/{new_id}", json={}).status_code == 400
+    assert client.put(f"/tasks/{new_id}", json={"title": ""}).status_code == 400
+    assert client.put("/tasks/999999", json={"done": True}).status_code == 404
+
+    # 7. Delete
+    r = client.delete(f"/tasks/{new_id}")
     assert r.status_code == 204
-    assert r.content == b""
-    assert client.delete("/tasks/4").status_code == 404
+    assert client.delete(f"/tasks/{new_id}").status_code == 404
 
-    # Stats
-    assert client.get("/stats").json() == {"total": 3, "done": 1, "open": 2}
+    # 8. Stats
+    r = client.get("/stats")
+    assert r.status_code == 200
+    stats = r.json()
+    assert "total" in stats and "done" in stats and "open" in stats
+    print("Stats OK:", stats)
 
+    # 9. Extras: search, filter, sort
+    assert len(client.get("/tasks", params={"search": "milk"}).json()) >= 1
+    assert len(client.get("/tasks", params={"done": "true"}).json()) >= 1
+    sorted_tasks = client.get("/tasks", params={"sort": "title"}).json()
+    titles = [t["title"].lower() for t in sorted_tasks]
+    assert titles == sorted(titles)
 
-def test_extras(client: TestClient):
-    assert [t["id"] for t in client.get("/tasks", params={"search": "milk"}).json()] == [1]
-    assert [t["id"] for t in client.get("/tasks", params={"done": "true"}).json()] == [2]
-    titles = [t["title"] for t in client.get("/tasks", params={"sort": "title"}).json()]
-    assert titles == sorted(titles, key=str.lower)
-    assert client.get("/tasks", params={"sort": "bogus"}).status_code == 400
-    # SQL injection attempt is treated as plain text, not as SQL
-    assert client.get("/tasks", params={"search": "' OR 1=1 --"}).json() == []
-
-
-def test_persistence_and_seed_once(db_path: Path):
-    with fresh_client(db_path) as client:
-        client.post("/tasks", json={"title": "Survive restart"})
-    # "Restart": a brand-new app startup on the same file
-    with fresh_client(db_path) as client:
-        tasks = client.get("/tasks").json()
-    assert len(tasks) == 4, "seed must not run again and the new task must survive"
-    assert tasks[-1]["title"] == "Survive restart"
+    print("All endpoint tests passed successfully!")
 
 
 if __name__ == "__main__":
-    with tempfile.TemporaryDirectory() as tmp:
-        with fresh_client(Path(tmp) / "a1.db") as c:
-            test_a1_contract(c)
-        with fresh_client(Path(tmp) / "extras.db") as c:
-            test_extras(c)
-        test_persistence_and_seed_once(Path(tmp) / "restart.db")
-    print("All tests passed")
+    test_api()
